@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+*.db
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+next-env.d.ts
+
+# Env & OS
+.env
+.env.local
+.env*.local
+.DS_Store
+
+# Editor
+.vscode/
+.idea/

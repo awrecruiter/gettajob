@@ -1,0 +1,33 @@
+{
+  "companies": [
+    {"source": "greenhouse", "slug": "anthropic", "name": "Anthropic"},
+    {"source": "greenhouse", "slug": "stripe", "name": "Stripe"},
+    {"source": "greenhouse", "slug": "airbnb", "name": "Airbnb"},
+    {"source": "lever", "slug": "palantir", "name": "Palantir"},
+    {"source": "lever", "slug": "spotify", "name": "Spotify"},
+    {"source": "ashby", "slug": "openai", "name": "OpenAI"},
+    {"source": "ashby", "slug": "ramp", "name": "Ramp"}
+  ],
+  "usajobs_queries": [
+    {
+      "keyword": "AI Engineer OR Machine Learning Engineer",
+      "location": "Boston, Massachusetts",
+      "results_per_page": 50
+    },
+    {
+      "keyword": "Systems Engineer",
+      "location": "New Hampshire",
+      "results_per_page": 50
+    }
+  ],
+  "target_titles": [
+    "Forward Deployment Engineer",
+    "Solutions Engineer",
+    "Field Engineer",
+    "Implementation Engineer",
+    "Systems Engineer",
+    "AI Engineer",
+    "Machine Learning Engineer",
+    "Autonomous Systems Engineer"
+  ]
+}

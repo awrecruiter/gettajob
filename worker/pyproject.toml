@@ -1,0 +1,22 @@
+[project]
+name = "gettajob"
+version = "0.1.0"
+description = "Automated job hunting system — v1 connector foundation"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+
+[project.scripts]
+gettajob = "gettajob.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gettajob"]
