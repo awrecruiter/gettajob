@@ -39,11 +39,19 @@ def _open_db(cli_arg: str | None) -> Database:
     return make_database(target)
 
 
+def _redact_db_target(target: str) -> str:
+    if target.startswith(("postgres://", "postgresql://")):
+        from urllib.parse import urlparse
+        u = urlparse(target)
+        return f"{u.scheme}://{u.hostname}{u.path}" if u.hostname else target
+    return target
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     target = _resolve_db_target(args.db)
     db = make_database(target)
     db.init()
-    print(f"Initialized database at {target}")
+    print(f"Initialized database at {_redact_db_target(target)}")
     return 0
 
 
