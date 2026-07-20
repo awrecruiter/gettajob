@@ -16,6 +16,19 @@ function fmtSalary(min: number | null, max: number | null): string | null {
   return fmt((min ?? max) as number);
 }
 
+function fmtBool(v: boolean | null): string {
+  if (v === null) return "—";
+  return v ? "Yes" : "No";
+}
+
+function scoreClass(score: number | null): string {
+  if (score == null) return "text-neutral-500";
+  if (score >= 90) return "text-emerald-400";
+  if (score >= 75) return "text-amber-300";
+  if (score >= 50) return "text-neutral-300";
+  return "text-neutral-500";
+}
+
 export default async function JobPage({ params }: PageProps) {
   const { id } = await params;
   const jobId = Number(id);
@@ -52,6 +65,73 @@ export default async function JobPage({ params }: PageProps) {
           </a>
         )}
       </header>
+
+      {job.scored_at && (
+        <section className="mb-6 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <div className="flex items-baseline gap-3">
+              <span className={`text-3xl font-semibold tabular-nums ${scoreClass(job.score)}`}>
+                {job.score}
+              </span>
+              <span className="text-sm text-neutral-500">
+                match score · {job.score_model ?? "unknown model"}
+              </span>
+            </div>
+            <span className="text-xs text-neutral-600">
+              scored {new Date(job.scored_at).toLocaleDateString()}
+            </span>
+          </div>
+          {job.score_reasoning && (
+            <p className="text-sm text-neutral-300 mb-4 italic">{job.score_reasoning}</p>
+          )}
+          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">Est. salary</dt>
+              <dd className="text-neutral-200">
+                {job.salary_estimate ? `$${(job.salary_estimate / 1000).toFixed(0)}k` : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">Could interview</dt>
+              <dd className="text-neutral-200">{fmtBool(job.could_get_interview)}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">Remote</dt>
+              <dd className="text-neutral-200">{fmtBool(job.remote_scored)}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">Clearance</dt>
+              <dd className="text-neutral-200">{fmtBool(job.clearance_required)}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">Travel</dt>
+              <dd className="text-neutral-200">
+                {job.travel_pct != null ? `${job.travel_pct}%` : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">Government</dt>
+              <dd className="text-neutral-200">{fmtBool(job.government)}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">Python</dt>
+              <dd className="text-neutral-200">{fmtBool(job.uses_python)}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">AI/ML</dt>
+              <dd className="text-neutral-200">{fmtBool(job.uses_ai)}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">C++</dt>
+              <dd className="text-neutral-200">{fmtBool(job.uses_cpp)}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500 text-xs uppercase tracking-wide">Customer-facing</dt>
+              <dd className="text-neutral-200">{fmtBool(job.customer_facing)}</dd>
+            </div>
+          </dl>
+        </section>
+      )}
 
       {job.description ? (
         <pre className="whitespace-pre-wrap font-sans text-sm text-neutral-300 leading-relaxed">
