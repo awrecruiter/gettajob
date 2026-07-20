@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from gettajob.models import Job
+from gettajob.models import Job, Score
 
 
 SCHEMA = """
@@ -44,6 +44,25 @@ CREATE TABLE IF NOT EXISTS connector_runs (
 );
 """
 
+# SQLite doesn't support ALTER TABLE ADD COLUMN IF NOT EXISTS, so migrations
+# are declared here and added conditionally in init().
+SCORING_COLUMNS: list[tuple[str, str]] = [
+    ("score", "INTEGER"),
+    ("salary_estimate", "INTEGER"),
+    ("clearance_required", "INTEGER"),
+    ("travel_pct", "INTEGER"),
+    ("remote_scored", "INTEGER"),
+    ("uses_python", "INTEGER"),
+    ("uses_ai", "INTEGER"),
+    ("customer_facing", "INTEGER"),
+    ("government", "INTEGER"),
+    ("uses_cpp", "INTEGER"),
+    ("could_get_interview", "INTEGER"),
+    ("score_reasoning", "TEXT"),
+    ("score_model", "TEXT"),
+    ("scored_at", "TEXT"),
+]
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -57,6 +76,11 @@ class SqliteDatabase:
 
     def init(self) -> None:
         self.conn.executescript(SCHEMA)
+        existing = {row["name"] for row in self.conn.execute("PRAGMA table_info(jobs)")}
+        for col, ddl in SCORING_COLUMNS:
+            if col not in existing:
+                self.conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} {ddl}")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs(score DESC)")
         self.conn.commit()
 
     def upsert_job(self, job: Job) -> bool:
@@ -140,6 +164,7 @@ class SqliteDatabase:
         limit: int = 50,
         company: Optional[str] = None,
         source: Optional[str] = None,
+        min_score: Optional[int] = None,
     ) -> list[sqlite3.Row]:
         query = "SELECT * FROM jobs WHERE 1=1"
         params: list = []
@@ -149,9 +174,67 @@ class SqliteDatabase:
         if source:
             query += " AND source = ?"
             params.append(source)
+        if min_score is not None:
+            query += " AND score >= ?"
+            params.append(min_score)
         query += " ORDER BY last_seen DESC LIMIT ?"
         params.append(limit)
         return self.conn.execute(query, params).fetchall()
+
+    def list_unscored(self, limit: int, source: Optional[str] = None) -> list[sqlite3.Row]:
+        query = (
+            "SELECT id, source, company, title, location, remote, salary_min, "
+            "salary_max, description FROM jobs WHERE scored_at IS NULL"
+        )
+        params: list = []
+        if source:
+            query += " AND source = ?"
+            params.append(source)
+        query += " ORDER BY last_seen DESC LIMIT ?"
+        params.append(limit)
+        return self.conn.execute(query, params).fetchall()
+
+    def update_score(self, score: Score) -> None:
+        remote_scored = None if score.remote_scored is None else int(score.remote_scored)
+        bool_cols = {
+            "clearance_required": score.clearance_required,
+            "uses_python": score.uses_python,
+            "uses_ai": score.uses_ai,
+            "customer_facing": score.customer_facing,
+            "government": score.government,
+            "uses_cpp": score.uses_cpp,
+            "could_get_interview": score.could_get_interview,
+        }
+        bool_ints = {k: (None if v is None else int(v)) for k, v in bool_cols.items()}
+        self.conn.execute(
+            """
+            UPDATE jobs
+               SET score = ?,
+                   salary_estimate = ?,
+                   clearance_required = ?,
+                   travel_pct = ?,
+                   remote_scored = ?,
+                   uses_python = ?,
+                   uses_ai = ?,
+                   customer_facing = ?,
+                   government = ?,
+                   uses_cpp = ?,
+                   could_get_interview = ?,
+                   score_reasoning = ?,
+                   score_model = ?,
+                   scored_at = ?
+             WHERE id = ?
+            """,
+            (
+                score.score, score.salary_estimate, bool_ints["clearance_required"],
+                score.travel_pct, remote_scored, bool_ints["uses_python"],
+                bool_ints["uses_ai"], bool_ints["customer_facing"],
+                bool_ints["government"], bool_ints["uses_cpp"],
+                bool_ints["could_get_interview"],
+                score.reasoning, score.model, _now(), score.job_id,
+            ),
+        )
+        self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()

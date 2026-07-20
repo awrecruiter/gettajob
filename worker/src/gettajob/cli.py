@@ -107,14 +107,56 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_list(args: argparse.Namespace) -> int:
     db = _open_db(args.db)
-    rows = db.list_jobs(limit=args.limit, company=args.company, source=args.source)
+    rows = db.list_jobs(
+        limit=args.limit,
+        company=args.company,
+        source=args.source,
+        min_score=args.min_score,
+    )
     for r in rows:
         salary = ""
         if r["salary_min"] or r["salary_max"]:
             salary = f" | ${r['salary_min'] or '?'}–${r['salary_max'] or '?'}"
         title = (r["title"] or "")[:60]
         loc = (r["location"] or "")[:25]
-        print(f"{r['source']:10} {r['company']:20} {title:60} {loc:25}{salary}")
+        score = r["score"] if "score" in r.keys() else None
+        score_col = f" [{score:>3}]" if score is not None else "  [ - ]"
+        print(f"{score_col} {r['source']:10} {r['company']:20} {title:60} {loc:25}{salary}")
+    return 0
+
+
+def cmd_score(args: argparse.Namespace) -> int:
+    try:
+        import anthropic
+    except ImportError:
+        print(
+            "anthropic SDK is required. Install with: pip install 'gettajob[scorer]'",
+            file=sys.stderr,
+        )
+        return 1
+    from gettajob.scorer import ScorerConfig, score_jobs
+
+    db = _open_db(args.db)
+    db.init()
+    unscored = list(db.list_unscored(limit=args.limit, source=args.source))
+    if not unscored:
+        print("No unscored jobs.")
+        return 0
+
+    normalized = [dict(row) for row in unscored]
+    print(f"Scoring {len(normalized)} jobs with {args.model} (batch={args.batch_size})…")
+
+    client = anthropic.Anthropic()
+    cfg = ScorerConfig(model=args.model, batch_size=args.batch_size)
+
+    scored_total = 0
+    for batch_scores, meta in score_jobs(client, normalized, cfg):
+        for s in batch_scores:
+            db.update_score(s)
+        scored_total += len(batch_scores)
+        print(f"  batch: {meta['batch_size']} jobs → {len(batch_scores)} scored (running total {scored_total})")
+
+    print(f"\nDone. Scored {scored_total} jobs.")
     return 0
 
 
@@ -143,6 +185,13 @@ def main(argv: list[str] | None = None) -> int:
     p_list.add_argument("--limit", type=int, default=50)
     p_list.add_argument("--company")
     p_list.add_argument("--source")
+    p_list.add_argument("--min-score", type=int, default=None, help="Only show jobs at or above this score")
+
+    p_score = sub.add_parser("score", help="Score unscored jobs via Claude")
+    p_score.add_argument("--limit", type=int, default=50, help="Max jobs to score in this run")
+    p_score.add_argument("--source", help="Only score jobs from this source")
+    p_score.add_argument("--batch-size", type=int, default=10)
+    p_score.add_argument("--model", default="claude-haiku-4-5")
 
     args = parser.parse_args(argv)
 
@@ -152,5 +201,7 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(args)
     if args.command == "list":
         return cmd_list(args)
+    if args.command == "score":
+        return cmd_score(args)
     parser.error(f"Unknown command: {args.command}")
     return 1

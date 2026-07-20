@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from typing import Optional
 
-from gettajob.models import Job
+from gettajob.models import Job, Score
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -27,6 +27,24 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company);
 CREATE INDEX IF NOT EXISTS idx_jobs_last_seen ON jobs(last_seen);
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score SMALLINT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS salary_estimate BIGINT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS clearance_required BOOLEAN;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS travel_pct SMALLINT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS remote_scored BOOLEAN;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS uses_python BOOLEAN;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS uses_ai BOOLEAN;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS customer_facing BOOLEAN;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS government BOOLEAN;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS uses_cpp BOOLEAN;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS could_get_interview BOOLEAN;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_reasoning TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_model TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS scored_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs(score DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_jobs_scored_at ON jobs(scored_at) WHERE scored_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS connector_runs (
     id BIGSERIAL PRIMARY KEY,
@@ -136,6 +154,7 @@ class PostgresDatabase:
         limit: int = 50,
         company: Optional[str] = None,
         source: Optional[str] = None,
+        min_score: Optional[int] = None,
     ) -> list[dict]:
         query = "SELECT * FROM jobs WHERE TRUE"
         params: list = []
@@ -145,11 +164,59 @@ class PostgresDatabase:
         if source:
             query += " AND source = %s"
             params.append(source)
+        if min_score is not None:
+            query += " AND score >= %s"
+            params.append(min_score)
         query += " ORDER BY last_seen DESC LIMIT %s"
         params.append(limit)
         with self.conn.cursor() as cur:
             cur.execute(query, params)
             return list(cur.fetchall())
+
+    def list_unscored(self, limit: int, source: Optional[str] = None) -> list[dict]:
+        query = (
+            "SELECT id, source, company, title, location, remote, salary_min, "
+            "salary_max, description FROM jobs WHERE scored_at IS NULL"
+        )
+        params: list = []
+        if source:
+            query += " AND source = %s"
+            params.append(source)
+        query += " ORDER BY last_seen DESC LIMIT %s"
+        params.append(limit)
+        with self.conn.cursor() as cur:
+            cur.execute(query, params)
+            return list(cur.fetchall())
+
+    def update_score(self, score: Score) -> None:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE jobs
+                   SET score = %s,
+                       salary_estimate = %s,
+                       clearance_required = %s,
+                       travel_pct = %s,
+                       remote_scored = %s,
+                       uses_python = %s,
+                       uses_ai = %s,
+                       customer_facing = %s,
+                       government = %s,
+                       uses_cpp = %s,
+                       could_get_interview = %s,
+                       score_reasoning = %s,
+                       score_model = %s,
+                       scored_at = %s
+                 WHERE id = %s
+                """,
+                (
+                    score.score, score.salary_estimate, score.clearance_required,
+                    score.travel_pct, score.remote_scored, score.uses_python,
+                    score.uses_ai, score.customer_facing, score.government,
+                    score.uses_cpp, score.could_get_interview,
+                    score.reasoning, score.model, _now(), score.job_id,
+                ),
+            )
 
     def close(self) -> None:
         self.conn.close()

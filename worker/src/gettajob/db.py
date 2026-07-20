@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
-from gettajob.models import Job
+from gettajob.models import Job, Score
 
 
 @runtime_checkable
@@ -22,7 +22,10 @@ class Database(Protocol):
         limit: int = 50,
         company: Optional[str] = None,
         source: Optional[str] = None,
+        min_score: Optional[int] = None,
     ) -> list: ...
+    def list_unscored(self, limit: int, source: Optional[str] = None) -> list: ...
+    def update_score(self, score: Score) -> None: ...
     def close(self) -> None: ...
 
 
