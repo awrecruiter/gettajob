@@ -138,12 +138,21 @@ def cmd_score(args: argparse.Namespace) -> int:
 
     db = _open_db(args.db)
     db.init()
-    unscored = list(db.list_unscored(limit=args.limit, source=args.source))
-    if not unscored:
-        print("No unscored jobs.")
-        return 0
+    if args.rescore:
+        jobs = list(db.get_jobs_by_ids(args.rescore))
+        missing = set(args.rescore) - {row["id"] for row in jobs}
+        if missing:
+            print(f"Warning: job ids not found: {sorted(missing)}", file=sys.stderr)
+        if not jobs:
+            print("No matching jobs.")
+            return 0
+    else:
+        jobs = list(db.list_unscored(limit=args.limit, source=args.source))
+        if not jobs:
+            print("No unscored jobs.")
+            return 0
 
-    normalized = [dict(row) for row in unscored]
+    normalized = [dict(row) for row in jobs]
     print(f"Scoring {len(normalized)} jobs with {args.model} (batch={args.batch_size})…")
 
     client = anthropic.Anthropic()
@@ -192,6 +201,13 @@ def main(argv: list[str] | None = None) -> int:
     p_score.add_argument("--source", help="Only score jobs from this source")
     p_score.add_argument("--batch-size", type=int, default=10)
     p_score.add_argument("--model", default="claude-haiku-4-5")
+    p_score.add_argument(
+        "--rescore",
+        type=int,
+        action="append",
+        metavar="JOB_ID",
+        help="Re-score specific job IDs (repeatable). Overrides --limit/--source.",
+    )
 
     args = parser.parse_args(argv)
 

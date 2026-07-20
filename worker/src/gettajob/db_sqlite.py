@@ -194,6 +194,16 @@ class SqliteDatabase:
         params.append(limit)
         return self.conn.execute(query, params).fetchall()
 
+    def get_jobs_by_ids(self, ids: list[int]) -> list[sqlite3.Row]:
+        if not ids:
+            return []
+        placeholders = ",".join("?" * len(ids))
+        query = (
+            f"SELECT id, source, company, title, location, remote, salary_min, "
+            f"salary_max, description FROM jobs WHERE id IN ({placeholders})"
+        )
+        return self.conn.execute(query, ids).fetchall()
+
     def update_score(self, score: Score) -> None:
         remote_scored = None if score.remote_scored is None else int(score.remote_scored)
         bool_cols = {

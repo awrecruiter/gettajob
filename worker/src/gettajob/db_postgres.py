@@ -188,6 +188,17 @@ class PostgresDatabase:
             cur.execute(query, params)
             return list(cur.fetchall())
 
+    def get_jobs_by_ids(self, ids: list[int]) -> list[dict]:
+        if not ids:
+            return []
+        query = (
+            "SELECT id, source, company, title, location, remote, salary_min, "
+            "salary_max, description FROM jobs WHERE id = ANY(%s)"
+        )
+        with self.conn.cursor() as cur:
+            cur.execute(query, (list(ids),))
+            return list(cur.fetchall())
+
     def update_score(self, score: Score) -> None:
         with self.conn.cursor() as cur:
             cur.execute(
