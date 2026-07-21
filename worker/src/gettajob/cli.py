@@ -11,6 +11,7 @@ from gettajob.connectors.base import Connector
 from gettajob.connectors.greenhouse import GreenhouseConnector
 from gettajob.connectors.lever import LeverConnector
 from gettajob.connectors.usajobs import USAJobsConnector
+from gettajob.connectors.workday import WorkdayConnector
 from gettajob.db import Database, make_database
 
 DEFAULT_DB = "gettajob.db"
@@ -81,6 +82,12 @@ def cmd_run(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
+
+    if not args.source or args.source == "workday":
+        for w in config.workday_tenants:
+            connectors.append(
+                WorkdayConnector(host=w.host, tenant=w.tenant, site=w.site, company_name=w.name)
+            )
 
     if not connectors:
         print("No connectors to run — check config.json and --source flag", file=sys.stderr)
@@ -186,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     p_run = sub.add_parser("run", help="Run connectors and store jobs")
     p_run.add_argument(
         "--source",
-        choices=["greenhouse", "lever", "ashby", "usajobs"],
+        choices=["greenhouse", "lever", "ashby", "usajobs", "workday"],
         help="Only run this source",
     )
 

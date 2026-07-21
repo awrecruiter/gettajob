@@ -20,6 +20,10 @@
       "results_per_page": 50
     }
   ],
+  "workday_tenants": [
+    {"host": "boeing.wd1.myworkdayjobs.com", "tenant": "boeing", "site": "EXTERNAL_CAREERS", "name": "Boeing"},
+    {"host": "bah.wd1.myworkdayjobs.com", "tenant": "bah", "site": "BAH_Jobs", "name": "Booz Allen Hamilton"}
+  ],
   "target_titles": [
     "Forward Deployment Engineer",
     "Solutions Engineer",

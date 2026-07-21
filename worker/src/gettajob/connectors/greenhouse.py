@@ -1,32 +1,12 @@
 import re
 from html import unescape
-from html.parser import HTMLParser
 from typing import Iterable, Optional
 
 import requests
 
+from gettajob.connectors._html import strip_html as _strip_html
 from gettajob.connectors.base import Connector
 from gettajob.models import Job
-
-
-class _Stripper(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.parts: list[str] = []
-
-    def handle_data(self, data: str) -> None:
-        self.parts.append(data)
-
-
-# Greenhouse serves content as HTML-encoded HTML (tags come through as &lt;div&gt;),
-# so we must unescape BEFORE parsing — otherwise the parser sees only text and the
-# tags survive unescape() at the end, polluting the description column.
-def _strip_html(html: Optional[str]) -> Optional[str]:
-    if not html:
-        return html
-    s = _Stripper()
-    s.feed(unescape(html))
-    return " ".join(s.parts).strip()
 
 
 _PAY_RANGE_RE = re.compile(
