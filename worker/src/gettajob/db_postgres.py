@@ -74,61 +74,97 @@ class PostgresDatabase:
                 "psycopg is required for Postgres. Install with: pip install 'gettajob[postgres]'"
             ) from e
         self._psycopg = psycopg
-        # Neon and Vercel both require sslmode=require; leave it to the caller's URL.
-        self.conn = psycopg.connect(url, row_factory=dict_row, autocommit=True)
+        self._dict_row = dict_row
+        self._url = url
+        self.conn = self._connect()
+
+    def _connect(self):
+        # Neon closes idle SSL connections; keepalives keep the socket alive
+        # across the ~200ms gaps between Workday detail-fetch upserts.
+        return self._psycopg.connect(
+            self._url,
+            row_factory=self._dict_row,
+            autocommit=True,
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=5,
+        )
+
+    def _reconnect_if_closed(self) -> None:
+        if self.conn.closed:
+            self.conn = self._connect()
+
+    def _execute(self, sql: str, params=None, *, fetch: Optional[str] = None):
+        """Execute one statement with one reconnect+retry on connection loss.
+
+        fetch: None (no fetch), 'one' (fetchone), or 'all' (fetchall as list).
+        """
+        for attempt in range(2):
+            try:
+                self._reconnect_if_closed()
+                with self.conn.cursor() as cur:
+                    cur.execute(sql, params)
+                    if fetch == "one":
+                        return cur.fetchone()
+                    if fetch == "all":
+                        return list(cur.fetchall())
+                    return None
+            except self._psycopg.OperationalError:
+                if attempt == 0:
+                    self.conn = self._connect()
+                    continue
+                raise
 
     def init(self) -> None:
-        with self.conn.cursor() as cur:
-            cur.execute(SCHEMA)
+        self._execute(SCHEMA)
 
     def upsert_job(self, job: Job) -> bool:
         raw = self._psycopg.types.json.Jsonb(job.raw) if job.raw is not None else None
         now = _now()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO jobs (
-                    external_id, source, company, title, location, remote,
-                    salary_min, salary_max, description, job_url,
-                    application_url, posted_at, first_seen, last_seen, raw
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s
-                )
-                ON CONFLICT (source, external_id) DO UPDATE
-                    SET title = EXCLUDED.title,
-                        location = EXCLUDED.location,
-                        remote = EXCLUDED.remote,
-                        salary_min = EXCLUDED.salary_min,
-                        salary_max = EXCLUDED.salary_max,
-                        description = EXCLUDED.description,
-                        job_url = EXCLUDED.job_url,
-                        application_url = EXCLUDED.application_url,
-                        posted_at = EXCLUDED.posted_at,
-                        last_seen = EXCLUDED.last_seen,
-                        raw = EXCLUDED.raw
-                RETURNING (xmax = 0) AS inserted
-                """,
-                (
-                    job.external_id, job.source, job.company, job.title,
-                    job.location, job.remote,
-                    job.salary_min, job.salary_max, job.description,
-                    job.job_url, job.application_url, job.posted_at,
-                    now, now, raw,
-                ),
+        row = self._execute(
+            """
+            INSERT INTO jobs (
+                external_id, source, company, title, location, remote,
+                salary_min, salary_max, description, job_url,
+                application_url, posted_at, first_seen, last_seen, raw
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s
             )
-            row = cur.fetchone()
-            return bool(row["inserted"])
+            ON CONFLICT (source, external_id) DO UPDATE
+                SET title = EXCLUDED.title,
+                    location = EXCLUDED.location,
+                    remote = EXCLUDED.remote,
+                    salary_min = EXCLUDED.salary_min,
+                    salary_max = EXCLUDED.salary_max,
+                    description = EXCLUDED.description,
+                    job_url = EXCLUDED.job_url,
+                    application_url = EXCLUDED.application_url,
+                    posted_at = EXCLUDED.posted_at,
+                    last_seen = EXCLUDED.last_seen,
+                    raw = EXCLUDED.raw
+            RETURNING (xmax = 0) AS inserted
+            """,
+            (
+                job.external_id, job.source, job.company, job.title,
+                job.location, job.remote,
+                job.salary_min, job.salary_max, job.description,
+                job.job_url, job.application_url, job.posted_at,
+                now, now, raw,
+            ),
+            fetch="one",
+        )
+        return bool(row["inserted"])
 
     def start_run(self, source: str, identifier: Optional[str]) -> int:
-        with self.conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO connector_runs (source, identifier, started_at) VALUES (%s, %s, %s) RETURNING id",
-                (source, identifier, _now()),
-            )
-            row = cur.fetchone()
-            return int(row["id"])
+        row = self._execute(
+            "INSERT INTO connector_runs (source, identifier, started_at) VALUES (%s, %s, %s) RETURNING id",
+            (source, identifier, _now()),
+            fetch="one",
+        )
+        return int(row["id"])
 
     def finish_run(
         self,
@@ -138,16 +174,15 @@ class PostgresDatabase:
         jobs_new: int,
         error_message: Optional[str] = None,
     ) -> None:
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE connector_runs
-                   SET finished_at = %s, status = %s, jobs_found = %s,
-                       jobs_new = %s, error_message = %s
-                 WHERE id = %s
-                """,
-                (_now(), status, jobs_found, jobs_new, error_message, run_id),
-            )
+        self._execute(
+            """
+            UPDATE connector_runs
+               SET finished_at = %s, status = %s, jobs_found = %s,
+                   jobs_new = %s, error_message = %s
+             WHERE id = %s
+            """,
+            (_now(), status, jobs_found, jobs_new, error_message, run_id),
+        )
 
     def list_jobs(
         self,
@@ -169,9 +204,7 @@ class PostgresDatabase:
             params.append(min_score)
         query += " ORDER BY last_seen DESC LIMIT %s"
         params.append(limit)
-        with self.conn.cursor() as cur:
-            cur.execute(query, params)
-            return list(cur.fetchall())
+        return self._execute(query, params, fetch="all")
 
     def list_unscored(self, limit: int, source: Optional[str] = None) -> list[dict]:
         query = (
@@ -184,9 +217,7 @@ class PostgresDatabase:
             params.append(source)
         query += " ORDER BY last_seen DESC LIMIT %s"
         params.append(limit)
-        with self.conn.cursor() as cur:
-            cur.execute(query, params)
-            return list(cur.fetchall())
+        return self._execute(query, params, fetch="all")
 
     def get_jobs_by_ids(self, ids: list[int]) -> list[dict]:
         if not ids:
@@ -195,39 +226,36 @@ class PostgresDatabase:
             "SELECT id, source, company, title, location, remote, salary_min, "
             "salary_max, description FROM jobs WHERE id = ANY(%s)"
         )
-        with self.conn.cursor() as cur:
-            cur.execute(query, (list(ids),))
-            return list(cur.fetchall())
+        return self._execute(query, (list(ids),), fetch="all")
 
     def update_score(self, score: Score) -> None:
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE jobs
-                   SET score = %s,
-                       salary_estimate = %s,
-                       clearance_required = %s,
-                       travel_pct = %s,
-                       remote_scored = %s,
-                       uses_python = %s,
-                       uses_ai = %s,
-                       customer_facing = %s,
-                       government = %s,
-                       uses_cpp = %s,
-                       could_get_interview = %s,
-                       score_reasoning = %s,
-                       score_model = %s,
-                       scored_at = %s
-                 WHERE id = %s
-                """,
-                (
-                    score.score, score.salary_estimate, score.clearance_required,
-                    score.travel_pct, score.remote_scored, score.uses_python,
-                    score.uses_ai, score.customer_facing, score.government,
-                    score.uses_cpp, score.could_get_interview,
-                    score.reasoning, score.model, _now(), score.job_id,
-                ),
-            )
+        self._execute(
+            """
+            UPDATE jobs
+               SET score = %s,
+                   salary_estimate = %s,
+                   clearance_required = %s,
+                   travel_pct = %s,
+                   remote_scored = %s,
+                   uses_python = %s,
+                   uses_ai = %s,
+                   customer_facing = %s,
+                   government = %s,
+                   uses_cpp = %s,
+                   could_get_interview = %s,
+                   score_reasoning = %s,
+                   score_model = %s,
+                   scored_at = %s
+             WHERE id = %s
+            """,
+            (
+                score.score, score.salary_estimate, score.clearance_required,
+                score.travel_pct, score.remote_scored, score.uses_python,
+                score.uses_ai, score.customer_facing, score.government,
+                score.uses_cpp, score.could_get_interview,
+                score.reasoning, score.model, _now(), score.job_id,
+            ),
+        )
 
     def close(self) -> None:
         self.conn.close()
