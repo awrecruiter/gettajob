@@ -188,6 +188,41 @@ def cmd_detect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gmail_scan(args: argparse.Namespace) -> int:
+    user = os.getenv("GMAIL_USER")
+    password = os.getenv("GMAIL_APP_PASSWORD")
+    if not user or not password:
+        print(
+            "Set GMAIL_USER and GMAIL_APP_PASSWORD in env. Generate an app password at "
+            "https://myaccount.google.com/apppasswords (requires 2FA enabled).",
+            file=sys.stderr,
+        )
+        return 1
+    from gettajob.gmail_parser import scan_inbox
+
+    counts: dict[str, dict] = {}
+    n_messages = 0
+    for alert in scan_inbox(user, password, since_days=args.days):
+        n_messages += 1
+        if args.verbose:
+            print(f"[{alert.date[:16]}] {alert.subject}")
+            for d in alert.detections:
+                print(f"    {json.dumps(d)}")
+        for d in alert.detections:
+            key = json.dumps(d, sort_keys=True)
+            entry = counts.setdefault(key, {"detection": d, "count": 0})
+            entry["count"] += 1
+
+    print(f"\nScanned {n_messages} alert messages from the last {args.days} days")
+    if not counts:
+        print("No supported ATS URLs detected. Configure LinkedIn/Indeed job alerts first?")
+        return 0
+    print(f"Unique employers detected ({len(counts)}):")
+    for entry in sorted(counts.values(), key=lambda e: -e["count"]):
+        print(f"  ×{entry['count']:>3}  {json.dumps(entry['detection'])}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
 
@@ -218,6 +253,10 @@ def main(argv: list[str] | None = None) -> int:
     p_detect = sub.add_parser("detect", help="Resolve a company URL to an ATS connector config")
     p_detect.add_argument("url", help="Careers page URL or bare domain (e.g. https://boards.greenhouse.io/anthropic)")
 
+    p_gmail = sub.add_parser("gmail-scan", help="Scan Gmail for job-alert URLs and detect ATS")
+    p_gmail.add_argument("--days", type=int, default=7, help="Look back N days (default 7)")
+    p_gmail.add_argument("--verbose", "-v", action="store_true", help="Print each matched message")
+
     p_score = sub.add_parser("score", help="Score unscored jobs via Claude")
     p_score.add_argument("--limit", type=int, default=50, help="Max jobs to score in this run")
     p_score.add_argument("--source", help="Only score jobs from this source")
@@ -241,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_list(args)
     if args.command == "detect":
         return cmd_detect(args)
+    if args.command == "gmail-scan":
+        return cmd_gmail_scan(args)
     if args.command == "score":
         return cmd_score(args)
     parser.error(f"Unknown command: {args.command}")
