@@ -38,6 +38,10 @@ export type JobFilters = {
   q?: string;
   limit?: number;
   minScore?: number;
+  location?: string;
+  remote?: boolean;
+  minSalary?: number;
+  clearance?: "hide" | "only";
 };
 
 const JOB_COLUMNS = `
@@ -70,6 +74,26 @@ export async function listJobs(filters: JobFilters = {}): Promise<Job[]> {
   if (filters.minScore != null) {
     params.push(filters.minScore);
     conditions.push(`score >= $${params.length}`);
+  }
+  if (filters.location) {
+    params.push(`%${filters.location}%`);
+    conditions.push(`location ILIKE $${params.length}`);
+  }
+  if (filters.remote) {
+    conditions.push(`(remote = TRUE OR remote_scored = TRUE)`);
+  }
+  if (filters.minSalary != null) {
+    params.push(filters.minSalary);
+    // Jobs without a stated salary pass — they might meet the bar, we just
+    // don't know. Explicit "require stated" would need a separate flag.
+    conditions.push(
+      `(salary_max >= $${params.length} OR salary_min >= $${params.length} OR (salary_min IS NULL AND salary_max IS NULL))`,
+    );
+  }
+  if (filters.clearance === "hide") {
+    conditions.push(`clearance_required IS NOT TRUE`);
+  } else if (filters.clearance === "only") {
+    conditions.push(`clearance_required = TRUE`);
   }
 
   params.push(filters.limit ?? 100);

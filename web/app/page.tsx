@@ -9,6 +9,10 @@ type SearchParams = Promise<{
   company?: string;
   q?: string;
   min_score?: string;
+  location?: string;
+  remote?: string;
+  min_salary?: string;
+  clearance?: string;
 }>;
 
 function scoreBadge(score: number | null): { label: string; className: string } {
@@ -49,10 +53,24 @@ function SetupCard() {
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   if (!hasDatabase()) return <SetupCard />;
 
-  const { source, company, q, min_score } = await searchParams;
+  const { source, company, q, min_score, location, remote, min_salary, clearance } =
+    await searchParams;
   const minScore = min_score ? Number(min_score) : undefined;
+  const minSalary = min_salary ? Number(min_salary) : undefined;
+  const clearanceFilter =
+    clearance === "hide" || clearance === "only" ? clearance : undefined;
   const [jobs, stats] = await Promise.all([
-    listJobs({ source, company, q, minScore, limit: 200 }),
+    listJobs({
+      source,
+      company,
+      q,
+      minScore,
+      location,
+      remote: remote === "1",
+      minSalary,
+      clearance: clearanceFilter,
+      limit: 200,
+    }),
     jobStats(),
   ]);
 
@@ -109,6 +127,46 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           <option value="75">≥ 75</option>
           <option value="50">≥ 50</option>
         </select>
+        <input
+          type="text"
+          name="location"
+          defaultValue={location ?? ""}
+          placeholder="Location"
+          className="px-3 py-2 rounded bg-neutral-900 border border-neutral-800 w-40"
+          title="Substring match on job location (e.g. Boston, NH, Remote)"
+        />
+        <select
+          name="min_salary"
+          defaultValue={min_salary ?? ""}
+          className="px-3 py-2 rounded bg-neutral-900 border border-neutral-800"
+          title="Minimum salary. Jobs without a stated salary are still shown."
+        >
+          <option value="">Any salary</option>
+          <option value="100000">$100k+</option>
+          <option value="150000">$150k+</option>
+          <option value="200000">$200k+</option>
+          <option value="250000">$250k+</option>
+        </select>
+        <select
+          name="clearance"
+          defaultValue={clearance ?? ""}
+          className="px-3 py-2 rounded bg-neutral-900 border border-neutral-800"
+          title="Filter by security-clearance requirement"
+        >
+          <option value="">Any clearance</option>
+          <option value="hide">Hide clearance roles</option>
+          <option value="only">Clearance only</option>
+        </select>
+        <label className="flex items-center gap-2 px-3 py-2 rounded bg-neutral-900 border border-neutral-800 cursor-pointer">
+          <input
+            type="checkbox"
+            name="remote"
+            value="1"
+            defaultChecked={remote === "1"}
+            className="accent-neutral-100"
+          />
+          <span className="text-neutral-300">Remote</span>
+        </label>
         <button
           type="submit"
           className="px-4 py-2 rounded bg-neutral-100 text-neutral-900 hover:bg-white font-medium"
