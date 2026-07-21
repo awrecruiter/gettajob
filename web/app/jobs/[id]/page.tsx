@@ -51,7 +51,11 @@ export default async function JobPage({ params }: PageProps) {
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-neutral-400">
           {job.location && <span>{job.location}</span>}
           {job.remote != null && <span>{job.remote ? "Remote" : "On-site"}</span>}
-          {salary && <span className="text-emerald-400">{salary}</span>}
+          {salary ? (
+            <span className="text-emerald-400">{salary}</span>
+          ) : (
+            <span className="text-neutral-600 italic">salary not stated</span>
+          )}
           <span className="text-neutral-500">via {job.source}</span>
         </div>
         {job.application_url && (

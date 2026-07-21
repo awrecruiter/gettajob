@@ -151,8 +151,14 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
                   <td className="px-3 py-2 text-neutral-400 whitespace-nowrap">
                     {j.location ?? "—"}
                   </td>
-                  <td className="px-3 py-2 text-neutral-400 whitespace-nowrap">
-                    {fmtSalary(j.salary_min, j.salary_max) || "—"}
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {fmtSalary(j.salary_min, j.salary_max) ? (
+                      <span className="text-neutral-400">
+                        {fmtSalary(j.salary_min, j.salary_max)}
+                      </span>
+                    ) : (
+                      <span className="text-neutral-600 italic">not stated</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-neutral-500 text-xs">{j.source}</td>
                   <td className="px-3 py-2 text-neutral-500 text-xs whitespace-nowrap">
