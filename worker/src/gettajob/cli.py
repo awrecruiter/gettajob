@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -176,6 +177,17 @@ def cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_detect(args: argparse.Namespace) -> int:
+    from gettajob.detector import detect
+
+    result = detect(args.url)
+    if result is None:
+        print(f"No supported ATS detected at {args.url}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
 
@@ -203,6 +215,9 @@ def main(argv: list[str] | None = None) -> int:
     p_list.add_argument("--source")
     p_list.add_argument("--min-score", type=int, default=None, help="Only show jobs at or above this score")
 
+    p_detect = sub.add_parser("detect", help="Resolve a company URL to an ATS connector config")
+    p_detect.add_argument("url", help="Careers page URL or bare domain (e.g. https://boards.greenhouse.io/anthropic)")
+
     p_score = sub.add_parser("score", help="Score unscored jobs via Claude")
     p_score.add_argument("--limit", type=int, default=50, help="Max jobs to score in this run")
     p_score.add_argument("--source", help="Only score jobs from this source")
@@ -224,6 +239,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(args)
     if args.command == "list":
         return cmd_list(args)
+    if args.command == "detect":
+        return cmd_detect(args)
     if args.command == "score":
         return cmd_score(args)
     parser.error(f"Unknown command: {args.command}")
