@@ -62,6 +62,7 @@ SCORING_COLUMNS: list[tuple[str, str]] = [
     ("score_model", "TEXT"),
     ("scored_at", "TEXT"),
     ("years_required", "INTEGER"),
+    ("shortlisted_at", "TEXT"),
 ]
 
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getJob } from "@/lib/jobs";
+import { StarButton } from "../../StarButton";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,10 @@ export default async function JobPage({ params }: PageProps) {
 
       <header className="mt-4 mb-6 border-b border-neutral-800 pb-6">
         <div className="text-sm text-neutral-400 mb-1">{job.company}</div>
-        <h1 className="text-2xl font-semibold">{job.title}</h1>
+        <div className="flex items-start gap-3">
+          <h1 className="text-2xl font-semibold flex-1">{job.title}</h1>
+          <StarButton jobId={job.id} starred={job.shortlisted_at != null} size="md" />
+        </div>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-neutral-400">
           {job.location && <span>{job.location}</span>}
           {job.remote != null && <span>{job.remote ? "Remote" : "On-site"}</span>}

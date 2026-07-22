@@ -31,6 +31,7 @@ export type Job = {
   score_model: string | null;
   scored_at: string | null;
   years_required: number | null;
+  shortlisted_at: string | null;
 };
 
 export type SortKey =
@@ -87,6 +88,7 @@ export type JobFilters = {
   clearance?: "hide" | "only";
   sort?: SortKey;
   maxYearsRequired?: number;
+  shortlistedOnly?: boolean;
 };
 
 const ORDER_BY: Record<SortKey, string> = {
@@ -105,7 +107,7 @@ const JOB_COLUMNS = `
   score, salary_estimate, clearance_required, travel_pct, remote_scored,
   uses_python, uses_ai, customer_facing, government, uses_cpp,
   could_get_interview, score_reasoning, score_model, scored_at,
-  years_required
+  years_required, shortlisted_at
 `;
 
 export async function listJobs(filters: JobFilters = {}): Promise<Job[]> {
@@ -159,6 +161,9 @@ export async function listJobs(filters: JobFilters = {}): Promise<Job[]> {
     conditions.push(
       `(years_required <= $${params.length} OR years_required IS NULL)`,
     );
+  }
+  if (filters.shortlistedOnly) {
+    conditions.push(`shortlisted_at IS NOT NULL`);
   }
 
   params.push(filters.limit ?? 100);

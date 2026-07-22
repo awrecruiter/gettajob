@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { hasDatabase } from "@/lib/db";
 import { listJobs, jobStats } from "@/lib/jobs";
+import { StarButton } from "./StarButton";
+import { BulkOpenButton } from "./BulkOpenButton";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +18,7 @@ type SearchParams = Promise<{
   clearance?: string;
   sort?: string;
   max_years?: string;
+  shortlisted?: string;
 }>;
 
 const SORT_OPTIONS = [
@@ -80,8 +83,9 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
 
   const {
     source, company, q, min_score, location, location_preset,
-    remote, min_salary, clearance, sort, max_years,
+    remote, min_salary, clearance, sort, max_years, shortlisted,
   } = await searchParams;
+  const shortlistedOnly = shortlisted === "1";
   const minScore = min_score ? Number(min_score) : undefined;
   const minSalary = min_salary ? Number(min_salary) : undefined;
   const maxYearsRequired = max_years ? Number(max_years) : undefined;
@@ -104,10 +108,14 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       clearance: clearanceFilter,
       sort: sortFilter,
       maxYearsRequired,
+      shortlistedOnly,
       limit: 200,
     }),
     jobStats(),
   ]);
+  const bulkUrls = shortlistedOnly
+    ? jobs.map((j) => j.application_url).filter((u): u is string => Boolean(u))
+    : [];
 
   return (
     <main className="max-w-6xl mx-auto p-6">
@@ -233,6 +241,16 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           />
           <span className="text-neutral-300">Remote</span>
         </label>
+        <label className="flex items-center gap-2 px-3 py-2 rounded bg-neutral-900 border border-neutral-800 cursor-pointer">
+          <input
+            type="checkbox"
+            name="shortlisted"
+            value="1"
+            defaultChecked={shortlistedOnly}
+            className="accent-amber-300"
+          />
+          <span className="text-neutral-300">★ Shortlisted only</span>
+        </label>
         <select
           name="sort"
           defaultValue={sort ?? ""}
@@ -254,12 +272,16 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
         </button>
       </form>
 
-      <div className="text-xs text-neutral-500 mb-3">Showing {jobs.length} results</div>
+      <div className="mb-3 flex items-baseline justify-between">
+        <div className="text-xs text-neutral-500">Showing {jobs.length} results</div>
+        {shortlistedOnly && <BulkOpenButton urls={bulkUrls} />}
+      </div>
 
       <div className="overflow-hidden rounded-lg border border-neutral-800">
         <table className="w-full text-sm">
           <thead className="bg-neutral-900 text-neutral-400 text-left">
             <tr>
+              <th className="px-3 py-2 font-medium w-8"></th>
               <th className="px-3 py-2 font-medium w-14 text-right">Score</th>
               <th className="px-3 py-2 font-medium">Company</th>
               <th className="px-3 py-2 font-medium">Title</th>
@@ -274,6 +296,9 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               const badge = scoreBadge(j.score);
               return (
                 <tr key={j.id} className="hover:bg-neutral-900/50">
+                  <td className="px-3 py-2 text-center">
+                    <StarButton jobId={j.id} starred={j.shortlisted_at != null} />
+                  </td>
                   <td className={`px-3 py-2 text-right tabular-nums ${badge.className}`}>
                     {badge.label}
                   </td>
@@ -311,7 +336,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
             })}
             {jobs.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-neutral-500">
+                <td colSpan={8} className="px-3 py-8 text-center text-neutral-500">
                   No jobs match those filters. Run the worker to populate.
                 </td>
               </tr>
