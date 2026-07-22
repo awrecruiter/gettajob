@@ -39,6 +39,40 @@ export type SortKey =
   | "recent"
   | "company";
 
+export type LocationPreset =
+  | "boston-ma"
+  | "nh"
+  | "dc-va"
+  | "bay-area"
+  | "nyc";
+
+// Curated OR-expansions per region. Static SQL — no user input is
+// interpolated, so ILIKE/regex fragments are safe as-is.
+const LOCATION_PRESET_SQL: Record<LocationPreset, string> = {
+  "boston-ma":
+    "(location ILIKE '%Boston%' OR location ILIKE '%Massachusetts%' " +
+    "OR location ~* '(^|[^A-Za-z])MA([^A-Za-z]|$)')",
+  "nh":
+    "(location ILIKE '%New Hampshire%' " +
+    "OR location ~* '(^|[^A-Za-z])NH([^A-Za-z]|$)')",
+  "dc-va":
+    "(location ILIKE '%Washington%' OR location ILIKE '%Arlington%' " +
+    "OR location ILIKE '%McLean%' OR location ILIKE '%Chantilly%' " +
+    "OR location ILIKE '%Herndon%' OR location ILIKE '%Reston%' " +
+    "OR location ILIKE '%Alexandria%' " +
+    "OR location ~* '(^|[^A-Za-z])(DC|VA)([^A-Za-z]|$)')",
+  "bay-area":
+    "(location ILIKE '%San Francisco%' OR location ILIKE '%Bay Area%' " +
+    "OR location ILIKE '%Palo Alto%' OR location ILIKE '%Mountain View%' " +
+    "OR location ILIKE '%Sunnyvale%' OR location ILIKE '%Santa Clara%' " +
+    "OR location ILIKE '%San Jose%' " +
+    // Berkeley/Oakland exist in multiple states — require CA context.
+    "OR location ILIKE '%Berkeley, CA%' OR location ILIKE '%Oakland, CA%')",
+  "nyc":
+    "(location ILIKE '%New York%' " +
+    "OR location ~* '(^|[^A-Za-z])NYC([^A-Za-z]|$)')",
+};
+
 export type JobFilters = {
   source?: string;
   company?: string;
@@ -46,6 +80,7 @@ export type JobFilters = {
   limit?: number;
   minScore?: number;
   location?: string;
+  locationPreset?: LocationPreset;
   remote?: boolean;
   minSalary?: number;
   clearance?: "hide" | "only";
@@ -95,6 +130,9 @@ export async function listJobs(filters: JobFilters = {}): Promise<Job[]> {
   if (filters.location) {
     params.push(`%${filters.location}%`);
     conditions.push(`location ILIKE $${params.length}`);
+  }
+  if (filters.locationPreset && filters.locationPreset in LOCATION_PRESET_SQL) {
+    conditions.push(LOCATION_PRESET_SQL[filters.locationPreset]);
   }
   if (filters.remote) {
     conditions.push(`(remote = TRUE OR remote_scored = TRUE)`);

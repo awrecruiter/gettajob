@@ -10,6 +10,7 @@ type SearchParams = Promise<{
   q?: string;
   min_score?: string;
   location?: string;
+  location_preset?: string;
   remote?: string;
   min_salary?: string;
   clearance?: string;
@@ -25,6 +26,18 @@ const SORT_OPTIONS = [
 ] as const;
 type SortValue = (typeof SORT_OPTIONS)[number]["value"];
 const SORT_SET = new Set<SortValue>(SORT_OPTIONS.map((o) => o.value));
+
+const LOCATION_PRESET_OPTIONS = [
+  { value: "boston-ma", label: "Boston / MA" },
+  { value: "nh", label: "New Hampshire" },
+  { value: "dc-va", label: "DC / Northern VA" },
+  { value: "bay-area", label: "Bay Area" },
+  { value: "nyc", label: "New York City" },
+] as const;
+type LocationPresetValue = (typeof LOCATION_PRESET_OPTIONS)[number]["value"];
+const LOCATION_PRESET_SET = new Set<LocationPresetValue>(
+  LOCATION_PRESET_OPTIONS.map((o) => o.value),
+);
 
 function scoreBadge(score: number | null): { label: string; className: string } {
   if (score == null) return { label: "—", className: "text-neutral-600" };
@@ -64,13 +77,18 @@ function SetupCard() {
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   if (!hasDatabase()) return <SetupCard />;
 
-  const { source, company, q, min_score, location, remote, min_salary, clearance, sort } =
-    await searchParams;
+  const {
+    source, company, q, min_score, location, location_preset,
+    remote, min_salary, clearance, sort,
+  } = await searchParams;
   const minScore = min_score ? Number(min_score) : undefined;
   const minSalary = min_salary ? Number(min_salary) : undefined;
   const clearanceFilter =
     clearance === "hide" || clearance === "only" ? clearance : undefined;
   const sortFilter = SORT_SET.has(sort as SortValue) ? (sort as SortValue) : undefined;
+  const locationPresetFilter = LOCATION_PRESET_SET.has(location_preset as LocationPresetValue)
+    ? (location_preset as LocationPresetValue)
+    : undefined;
   const [jobs, stats] = await Promise.all([
     listJobs({
       source,
@@ -78,6 +96,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       q,
       minScore,
       location,
+      locationPreset: locationPresetFilter,
       remote: remote === "1",
       minSalary,
       clearance: clearanceFilter,
@@ -140,13 +159,26 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           <option value="75">≥ 75</option>
           <option value="50">≥ 50</option>
         </select>
+        <select
+          name="location_preset"
+          defaultValue={location_preset ?? ""}
+          className="px-3 py-2 rounded bg-neutral-900 border border-neutral-800"
+          title="Preset regions — each expands to the common name variants"
+        >
+          <option value="">Any region</option>
+          {LOCATION_PRESET_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
           name="location"
           defaultValue={location ?? ""}
-          placeholder="Location"
-          className="px-3 py-2 rounded bg-neutral-900 border border-neutral-800 w-40"
-          title="Substring match on job location (e.g. Boston, NH, Remote)"
+          placeholder="City / other"
+          className="px-3 py-2 rounded bg-neutral-900 border border-neutral-800 w-32"
+          title="Substring match on location — use for one-off city searches"
         />
         <select
           name="min_salary"
