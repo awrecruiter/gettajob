@@ -32,17 +32,21 @@ def _parse_salary(text: Optional[str]) -> tuple[Optional[int], Optional[int]]:
     m = _SALARY_RE.search(text)
     if not m:
         return None, None
-    def _to_int(raw: str, is_k: bool) -> Optional[int]:
+    def _to_int(raw: str) -> Optional[int]:
         try:
             n = float(raw.replace(",", ""))
         except ValueError:
             return None
-        if is_k or n < 1000:  # bare number likely meant thousands
+        # Interpret bare numbers as thousands ("135" = $135k), but if the raw
+        # value is already >= 1000 trust it verbatim — some Boeing postings
+        # literally write "$135,000K" (a typo they mean as $135,000, not $135M).
+        if n < 1000:
             n *= 1000
+        # Sanity cap: no legitimate engineering salary exceeds $10M.
+        if n > 10_000_000:
+            return None
         return int(n)
-    span_text = m.group(0)
-    is_k = "k" in span_text.lower()
-    return _to_int(m.group(1), is_k), _to_int(m.group(2), is_k)
+    return _to_int(m.group(1)), _to_int(m.group(2))
 
 
 class WorkdayConnector(Connector):
@@ -78,8 +82,12 @@ class WorkdayConnector(Connector):
             "content-type": "application/json",
             "user-agent": _UA,
         }
+        # Workday only reports `total` on the first response; later pages come
+        # back with total=0, so we anchor on the initial value and paginate
+        # until we exhaust it or hit max_pages.
         offset = 0
         pages = 0
+        total: Optional[int] = None
         while pages < self.max_pages:
             body = json.dumps(
                 {
@@ -95,13 +103,14 @@ class WorkdayConnector(Connector):
             postings = data.get("jobPostings") or []
             if not postings:
                 break
+            if total is None:
+                total = int(data.get("total") or 0)
             for p in postings:
                 job = self._fetch_detail(p)
                 if job is not None:
                     yield job
             offset += self.page_size
-            total = int(data.get("total") or 0)
-            if offset >= total:
+            if total and offset >= total:
                 break
             pages += 1
 

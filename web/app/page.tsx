@@ -13,7 +13,18 @@ type SearchParams = Promise<{
   remote?: string;
   min_salary?: string;
   clearance?: string;
+  sort?: string;
 }>;
+
+const SORT_OPTIONS = [
+  { value: "score", label: "Match score" },
+  { value: "salary", label: "Salary (high→low)" },
+  { value: "newest", label: "Newly posted" },
+  { value: "recent", label: "Most recently seen" },
+  { value: "company", label: "Company (A→Z)" },
+] as const;
+type SortValue = (typeof SORT_OPTIONS)[number]["value"];
+const SORT_SET = new Set<SortValue>(SORT_OPTIONS.map((o) => o.value));
 
 function scoreBadge(score: number | null): { label: string; className: string } {
   if (score == null) return { label: "—", className: "text-neutral-600" };
@@ -53,12 +64,13 @@ function SetupCard() {
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   if (!hasDatabase()) return <SetupCard />;
 
-  const { source, company, q, min_score, location, remote, min_salary, clearance } =
+  const { source, company, q, min_score, location, remote, min_salary, clearance, sort } =
     await searchParams;
   const minScore = min_score ? Number(min_score) : undefined;
   const minSalary = min_salary ? Number(min_salary) : undefined;
   const clearanceFilter =
     clearance === "hide" || clearance === "only" ? clearance : undefined;
+  const sortFilter = SORT_SET.has(sort as SortValue) ? (sort as SortValue) : undefined;
   const [jobs, stats] = await Promise.all([
     listJobs({
       source,
@@ -69,6 +81,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       remote: remote === "1",
       minSalary,
       clearance: clearanceFilter,
+      sort: sortFilter,
       limit: 200,
     }),
     jobStats(),
@@ -167,6 +180,19 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           />
           <span className="text-neutral-300">Remote</span>
         </label>
+        <select
+          name="sort"
+          defaultValue={sort ?? ""}
+          className="px-3 py-2 rounded bg-neutral-900 border border-neutral-800"
+          title="Sort order"
+        >
+          <option value="">Sort: default</option>
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              Sort: {o.label}
+            </option>
+          ))}
+        </select>
         <button
           type="submit"
           className="px-4 py-2 rounded bg-neutral-100 text-neutral-900 hover:bg-white font-medium"

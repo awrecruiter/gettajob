@@ -38,6 +38,10 @@ DEFAULT_SENDERS = [
     "noreply@indeed.com",
     "notify@ziprecruiter.com",
     "no-reply@ziprecruiter.com",
+    # ClearanceJobs: no scraping (PRD §6 — aggressive detection). Alert-only.
+    "alerts@clearancejobs.com",
+    "notifications@clearancejobs.com",
+    "noreply@clearancejobs.com",
 ]
 
 

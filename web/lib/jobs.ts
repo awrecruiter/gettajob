@@ -32,6 +32,13 @@ export type Job = {
   scored_at: string | null;
 };
 
+export type SortKey =
+  | "score"
+  | "salary"
+  | "newest"
+  | "recent"
+  | "company";
+
 export type JobFilters = {
   source?: string;
   company?: string;
@@ -42,6 +49,16 @@ export type JobFilters = {
   remote?: boolean;
   minSalary?: number;
   clearance?: "hide" | "only";
+  sort?: SortKey;
+};
+
+const ORDER_BY: Record<SortKey, string> = {
+  score: "ORDER BY score DESC NULLS LAST, last_seen DESC",
+  salary:
+    "ORDER BY GREATEST(COALESCE(salary_max, 0), COALESCE(salary_min, 0)) DESC NULLS LAST, score DESC NULLS LAST",
+  newest: "ORDER BY first_seen DESC",
+  recent: "ORDER BY last_seen DESC",
+  company: "ORDER BY company ASC, title ASC",
 };
 
 const JOB_COLUMNS = `
@@ -97,9 +114,8 @@ export async function listJobs(filters: JobFilters = {}): Promise<Job[]> {
   }
 
   params.push(filters.limit ?? 100);
-  const orderBy = filters.minScore != null
-    ? "ORDER BY score DESC NULLS LAST, last_seen DESC"
-    : "ORDER BY last_seen DESC";
+  const defaultSort: SortKey = filters.minScore != null ? "score" : "recent";
+  const orderBy = ORDER_BY[filters.sort ?? defaultSort];
   const sql = `
     SELECT ${JOB_COLUMNS}
       FROM jobs
