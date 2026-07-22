@@ -122,6 +122,11 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
             {stats.bySource.map((s) => `${s.source} ${s.count}`).join(" · ")}
           </p>
         </div>
+        <nav>
+          <Link href="/resources" className="text-sm text-neutral-400 hover:text-neutral-200">
+            GovCon resources →
+          </Link>
+        </nav>
       </header>
 
       <form className="mb-4 flex flex-wrap gap-2 text-sm">
