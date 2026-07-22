@@ -30,6 +30,7 @@ export type Job = {
   score_reasoning: string | null;
   score_model: string | null;
   scored_at: string | null;
+  years_required: number | null;
 };
 
 export type SortKey =
@@ -85,6 +86,7 @@ export type JobFilters = {
   minSalary?: number;
   clearance?: "hide" | "only";
   sort?: SortKey;
+  maxYearsRequired?: number;
 };
 
 const ORDER_BY: Record<SortKey, string> = {
@@ -102,7 +104,8 @@ const JOB_COLUMNS = `
   posted_at, first_seen, last_seen,
   score, salary_estimate, clearance_required, travel_pct, remote_scored,
   uses_python, uses_ai, customer_facing, government, uses_cpp,
-  could_get_interview, score_reasoning, score_model, scored_at
+  could_get_interview, score_reasoning, score_model, scored_at,
+  years_required
 `;
 
 export async function listJobs(filters: JobFilters = {}): Promise<Job[]> {
@@ -149,6 +152,13 @@ export async function listJobs(filters: JobFilters = {}): Promise<Job[]> {
     conditions.push(`clearance_required IS NOT TRUE`);
   } else if (filters.clearance === "only") {
     conditions.push(`clearance_required = TRUE`);
+  }
+  if (filters.maxYearsRequired != null) {
+    params.push(filters.maxYearsRequired);
+    // Jobs with an unknown requirement pass — we can't rule them out.
+    conditions.push(
+      `(years_required <= $${params.length} OR years_required IS NULL)`,
+    );
   }
 
   params.push(filters.limit ?? 100);

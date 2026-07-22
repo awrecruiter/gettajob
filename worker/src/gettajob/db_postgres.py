@@ -42,6 +42,7 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS could_get_interview BOOLEAN;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_reasoning TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_model TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS scored_at TIMESTAMPTZ;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS years_required SMALLINT;
 
 CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs(score DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_jobs_scored_at ON jobs(scored_at) WHERE scored_at IS NULL;
@@ -120,18 +121,23 @@ class PostgresDatabase:
         self._execute(SCHEMA)
 
     def upsert_job(self, job: Job) -> bool:
+        from gettajob.experience import extract_years_required
+
         raw = self._psycopg.types.json.Jsonb(job.raw) if job.raw is not None else None
+        years_required = extract_years_required(job.description)
         now = _now()
         row = self._execute(
             """
             INSERT INTO jobs (
                 external_id, source, company, title, location, remote,
                 salary_min, salary_max, description, job_url,
-                application_url, posted_at, first_seen, last_seen, raw
+                application_url, posted_at, first_seen, last_seen, raw,
+                years_required
             ) VALUES (
                 %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s,
+                %s
             )
             ON CONFLICT (source, external_id) DO UPDATE
                 SET title = EXCLUDED.title,
@@ -144,7 +150,8 @@ class PostgresDatabase:
                     application_url = EXCLUDED.application_url,
                     posted_at = EXCLUDED.posted_at,
                     last_seen = EXCLUDED.last_seen,
-                    raw = EXCLUDED.raw
+                    raw = EXCLUDED.raw,
+                    years_required = EXCLUDED.years_required
             RETURNING (xmax = 0) AS inserted
             """,
             (
@@ -153,6 +160,7 @@ class PostgresDatabase:
                 job.salary_min, job.salary_max, job.description,
                 job.job_url, job.application_url, job.posted_at,
                 now, now, raw,
+                years_required,
             ),
             fetch="one",
         )

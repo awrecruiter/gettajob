@@ -15,6 +15,7 @@ type SearchParams = Promise<{
   min_salary?: string;
   clearance?: string;
   sort?: string;
+  max_years?: string;
 }>;
 
 const SORT_OPTIONS = [
@@ -79,10 +80,11 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
 
   const {
     source, company, q, min_score, location, location_preset,
-    remote, min_salary, clearance, sort,
+    remote, min_salary, clearance, sort, max_years,
   } = await searchParams;
   const minScore = min_score ? Number(min_score) : undefined;
   const minSalary = min_salary ? Number(min_salary) : undefined;
+  const maxYearsRequired = max_years ? Number(max_years) : undefined;
   const clearanceFilter =
     clearance === "hide" || clearance === "only" ? clearance : undefined;
   const sortFilter = SORT_SET.has(sort as SortValue) ? (sort as SortValue) : undefined;
@@ -101,6 +103,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       minSalary,
       clearance: clearanceFilter,
       sort: sortFilter,
+      maxYearsRequired,
       limit: 200,
     }),
     jobStats(),
@@ -201,6 +204,19 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           <option value="">Any clearance</option>
           <option value="hide">Hide clearance roles</option>
           <option value="only">Clearance only</option>
+        </select>
+        <select
+          name="max_years"
+          defaultValue={max_years ?? ""}
+          className="px-3 py-2 rounded bg-neutral-900 border border-neutral-800"
+          title="Max years experience required. Jobs without a stated requirement are still shown."
+        >
+          <option value="">Any experience</option>
+          <option value="3">≤ 3 yrs required</option>
+          <option value="5">≤ 5 yrs required</option>
+          <option value="7">≤ 7 yrs required</option>
+          <option value="10">≤ 10 yrs required</option>
+          <option value="15">≤ 15 yrs required</option>
         </select>
         <label className="flex items-center gap-2 px-3 py-2 rounded bg-neutral-900 border border-neutral-800 cursor-pointer">
           <input
