@@ -86,15 +86,18 @@ class SqliteDatabase:
 
     def upsert_job(self, job: Job) -> bool:
         """Insert a new job or refresh last_seen on an existing one. Returns True if newly inserted."""
+        from gettajob.clearance import extract_clearance_required
         from gettajob.experience import extract_years_required
 
         now = _now()
         raw_json = json.dumps(job.raw) if job.raw is not None else None
         remote = int(job.remote) if job.remote is not None else None
         years_required = extract_years_required(job.description)
+        clearance_regex = extract_clearance_required(job.description)
+        clearance_int = None if clearance_regex is None else int(clearance_regex)
 
         cur = self.conn.execute(
-            "SELECT id FROM jobs WHERE source = ? AND external_id = ?",
+            "SELECT id, clearance_required FROM jobs WHERE source = ? AND external_id = ?",
             (job.source, job.external_id),
         )
         row = cur.fetchone()
@@ -105,8 +108,8 @@ class SqliteDatabase:
                     external_id, source, company, title, location, remote,
                     salary_min, salary_max, description, job_url,
                     application_url, posted_at, first_seen, last_seen, raw_json,
-                    years_required
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    years_required, clearance_required
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job.external_id, job.source, job.company, job.title,
@@ -114,26 +117,28 @@ class SqliteDatabase:
                     job.salary_min, job.salary_max, job.description,
                     job.job_url, job.application_url, job.posted_at,
                     now, now, raw_json,
-                    years_required,
+                    years_required, clearance_int,
                 ),
             )
             self.conn.commit()
             return True
 
+        # Preserve existing clearance_required (scorer output) when regex is silent.
+        merged_clearance = clearance_int if clearance_int is not None else row["clearance_required"]
         self.conn.execute(
             """
             UPDATE jobs
                SET last_seen = ?, title = ?, location = ?, remote = ?,
                    salary_min = ?, salary_max = ?, description = ?,
                    job_url = ?, application_url = ?, posted_at = ?, raw_json = ?,
-                   years_required = ?
+                   years_required = ?, clearance_required = ?
              WHERE id = ?
             """,
             (
                 now, job.title, job.location, remote,
                 job.salary_min, job.salary_max, job.description,
                 job.job_url, job.application_url, job.posted_at, raw_json,
-                years_required,
+                years_required, merged_clearance,
                 row["id"],
             ),
         )

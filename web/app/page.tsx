@@ -280,8 +280,13 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
                       {j.title}
                     </Link>
                   </td>
-                  <td className="px-3 py-2 text-neutral-400 whitespace-nowrap">
-                    {j.location ?? "—"}
+                  <td className="px-3 py-2">
+                    <div
+                      className="text-neutral-400 truncate max-w-[18ch]"
+                      title={j.location ?? ""}
+                    >
+                      {j.location ?? "—"}
+                    </div>
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {fmtSalary(j.salary_min, j.salary_max) ? (

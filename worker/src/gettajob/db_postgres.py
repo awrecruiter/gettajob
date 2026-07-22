@@ -121,10 +121,12 @@ class PostgresDatabase:
         self._execute(SCHEMA)
 
     def upsert_job(self, job: Job) -> bool:
+        from gettajob.clearance import extract_clearance_required
         from gettajob.experience import extract_years_required
 
         raw = self._psycopg.types.json.Jsonb(job.raw) if job.raw is not None else None
         years_required = extract_years_required(job.description)
+        clearance_required = extract_clearance_required(job.description)
         now = _now()
         row = self._execute(
             """
@@ -132,12 +134,12 @@ class PostgresDatabase:
                 external_id, source, company, title, location, remote,
                 salary_min, salary_max, description, job_url,
                 application_url, posted_at, first_seen, last_seen, raw,
-                years_required
+                years_required, clearance_required
             ) VALUES (
                 %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s, %s,
-                %s
+                %s, %s
             )
             ON CONFLICT (source, external_id) DO UPDATE
                 SET title = EXCLUDED.title,
@@ -151,7 +153,11 @@ class PostgresDatabase:
                     posted_at = EXCLUDED.posted_at,
                     last_seen = EXCLUDED.last_seen,
                     raw = EXCLUDED.raw,
-                    years_required = EXCLUDED.years_required
+                    years_required = EXCLUDED.years_required,
+                    -- Preserve scorer output when regex doesn't detect one.
+                    clearance_required = COALESCE(
+                        EXCLUDED.clearance_required, jobs.clearance_required
+                    )
             RETURNING (xmax = 0) AS inserted
             """,
             (
@@ -160,7 +166,7 @@ class PostgresDatabase:
                 job.salary_min, job.salary_max, job.description,
                 job.job_url, job.application_url, job.posted_at,
                 now, now, raw,
-                years_required,
+                years_required, clearance_required,
             ),
             fetch="one",
         )
